@@ -67,11 +67,11 @@ class Program
 			Defense = int.Parse(inputs[6]);
 			Abilities = Bonus.None;
 			if (inputs[7][0] == 'B') Abilities |= Bonus.Breakthrough;
-			if (inputs[7][0] == 'C') Abilities |= Bonus.Charge;
-			if (inputs[7][0] == 'D') Abilities |= Bonus.Drain;
-			if (inputs[7][0] == 'G') Abilities |= Bonus.Guard;
-			if (inputs[7][0] == 'L') Abilities |= Bonus.Lethal;
-			if (inputs[7][0] == 'W') Abilities |= Bonus.Ward;
+			if (inputs[7][1] == 'C') Abilities |= Bonus.Charge;
+			if (inputs[7][2] == 'D') Abilities |= Bonus.Drain;
+			if (inputs[7][3] == 'G') Abilities |= Bonus.Guard;
+			if (inputs[7][4] == 'L') Abilities |= Bonus.Lethal;
+			if (inputs[7][5] == 'W') Abilities |= Bonus.Ward;
 			
 			MyHealthChange = int.Parse(inputs[8]);
 			OpponentHealthChange = int.Parse(inputs[9]);
@@ -207,7 +207,7 @@ class Program
 		Card[] board = cards.Where(x => x.Location == CardLocation.MyBoard).OrderBy(x => x.Attack).ThenBy(x => x.Defense).ToArray();
 		Card[] hand = cards.Where(x => x.Location == CardLocation.MyHand && x.Cost <= me.Mana).OrderByDescending(x => x.Cost).ToArray();
 		List<Card> opponentBoard = cards.Where(x => x.Location == CardLocation.OpponentBoard).ToList();
-		if (IsLethal(opponent.Health, board))
+		if (opponentBoard.All(x => !x.Abilities.HasFlag(Bonus.Guard)) && IsLethal(opponent.Health, board))
 		{
 			return string.Join(";", board.Select(x => $"ATTACK {x.InstanceId} -1 Lethal mode"));
 		}
@@ -247,8 +247,30 @@ class Program
 
 			//source / target
 			List<Tuple<int, int>> result = new List<Tuple<int, int>>();
+
+			List<Card> opponentGuards = opponentBoard.Where(x => x.Abilities.HasFlag(Bonus.Guard)).ToList();
+			Console.Error.WriteLine($"Opponent guards: {string.Join(", ", opponentGuards.Select(x => x.InstanceId.ToString()))}");
 			foreach (Card myCard in board)
 			{
+				if (opponentGuards.Count > 0)
+				{
+					Card[] killableGuards = opponentGuards.Where(x => x.Defense <= myCard.Attack).OrderBy(x => x.Attack).ToArray();
+					if (killableGuards.Length == 0)
+					{
+						Card guard = opponentGuards.OrderBy(x => x.Defense).First();
+						guard.Defense -= myCard.Attack;
+						result.Add(Tuple.Create(myCard.InstanceId, guard.InstanceId));
+					}
+					else
+					{
+						Card guardDeath = killableGuards.OrderByDescending(x => x.Defense).First();
+						result.Add(Tuple.Create(myCard.InstanceId,guardDeath.InstanceId));
+						opponentGuards.Remove(guardDeath);
+						opponentBoard.Remove(guardDeath);
+					}
+					continue;
+				}
+				
 				Card[] killable = opponentBoard.Where(x => x.Defense <= myCard.Attack).OrderBy(x => x.Attack).ToArray();
 
 				if (killable.Length == 0)
@@ -256,12 +278,14 @@ class Program
 					result.Add(Tuple.Create(myCard.InstanceId, -1));
 					continue;
 				}
+				
 
 				Card current = killable[0];
 				if (current.Attack > myCard.Defense)
 				{
-					result.Add(Tuple.Create(myCard.InstanceId, killable.Last().InstanceId));
-					opponentBoard.Remove(killable.Last());
+					Card lastCard = killable.Last();
+					result.Add(Tuple.Create(myCard.InstanceId, lastCard.InstanceId));
+					opponentBoard.Remove(lastCard);
 					continue;
 				}
 
