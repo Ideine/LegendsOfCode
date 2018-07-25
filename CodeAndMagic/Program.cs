@@ -292,7 +292,10 @@ class Program
 				opponentBoard.Remove(killable[index]);
 			}
 			
-			//TODO: attach
+			if (result.Count > 0)
+			{
+				attackAction = string.Join(";", result.Select(x => $"ATTACK {x.Item1} {x.Item2}"));
+			}
 		}
 
 		if (summonAction != null || attackAction != null)
