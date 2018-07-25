@@ -39,7 +39,7 @@ class Program
 		Lethal = 16,
 		Ward = 32
 	}
-	
+
 	class Card
 	{
 		public int CardNumber;
@@ -72,7 +72,7 @@ class Program
 			if (inputs[7][3] == 'G') Abilities |= Bonus.Guard;
 			if (inputs[7][4] == 'L') Abilities |= Bonus.Lethal;
 			if (inputs[7][5] == 'W') Abilities |= Bonus.Ward;
-			
+
 			MyHealthChange = int.Parse(inputs[8]);
 			OpponentHealthChange = int.Parse(inputs[9]);
 			CardDraw = int.Parse(inputs[10]);
@@ -163,7 +163,7 @@ class Program
 		}
 	}
 
-	private static string SummonAction(Player me, Card[] hand)
+	private static List<Card> SummonAction(Player me, Card[] hand)
 	{
 		List<Tuple<int, List<Card>>> playableCombinations = DoCombination(hand, me.Mana)
 			.Where(x => x.Count > 0)
@@ -180,7 +180,7 @@ class Program
 		int firstMana = playableCombinations[0].Item1;
 		int firstCount = playableCombinations[0].Item2.Count;
 
-		List<Tuple<List<Card>,int>> filteredItems = playableCombinations.TakeWhile(x => x.Item1 == firstMana && x.Item2.Count == firstCount)
+		List<Tuple<List<Card>, int>> filteredItems = playableCombinations.TakeWhile(x => x.Item1 == firstMana && x.Item2.Count == firstCount)
 			.Select(x => Tuple.Create(x.Item2, Ecart(x.Item2)))
 			.OrderBy(x => x.Item2)
 			.ToList();
@@ -193,13 +193,57 @@ class Program
 			.Select(x => x.Item1)
 			.First();
 
-		return string.Join(";", items.Select(x => $"SUMMON {x.InstanceId}"));
+		return items;
 	}
 
 	private static int Ecart(List<Card> cards)
 	{
 		double average = cards.Average(x => x.Cost);
 		return (int) Math.Floor(cards.Sum(x => x.Cost - average));
+	}
+
+	private static Tuple<int, int> Kill(Card myCard, Card[] killable, List<Card> opponentBoard, List<Card> opponentGuard, bool allowDying)
+	{
+		Card current = killable[0];
+		if (current.Attack > myCard.Defense)
+		{
+			Card lastCard = killable.Last();
+			opponentBoard.Remove(lastCard);
+			opponentGuard?.Remove(lastCard);
+			return Tuple.Create(myCard.InstanceId, lastCard.InstanceId);
+		}
+
+		int index = -1;
+		int usedAttackPoint = 0;
+
+		for (var i = 0; i < killable.Length; i++)
+		{
+			current = killable[i];
+			if (current.Attack > myCard.Defense)
+			{
+				if (!allowDying)
+				{
+					continue;
+				}
+			}
+
+			int spendPoints = Math.Min(current.Defense, myCard.Attack);
+			if (usedAttackPoint < spendPoints)
+			{
+				usedAttackPoint = spendPoints;
+				index = i;
+			}
+		}
+
+		if (index < 0)
+		{
+			index = 0;
+		}
+
+		Card selectedCard = killable[index];
+		opponentBoard.Remove(selectedCard);
+		opponentGuard?.Remove(selectedCard);
+		return Tuple.Create(myCard.InstanceId, selectedCard.InstanceId);
 	}
 
 	private static string Play(Player me, Player opponent, int opponentHand, List<Card> cards)
@@ -213,29 +257,18 @@ class Program
 		}
 
 		string summonAction = null;
+
 		if (hand.Length > 0)
 		{
-			summonAction = SummonAction(me, hand);
-			/*
-			//trouver la carte à jouer
-			List<Card> cardsToPlay = new List<Card>(2);
-			int mana = me.Mana;
+			List<Card> summon = SummonAction(me, hand);
 
-			for (int i = 0; i < hand.Length && mana > 0; ++i)
+			if (summon.Count > 0)
 			{
-			    Card c = hand[i];
-			    if (c.Cost < mana)
-			    {
-			        cardsToPlay.Add(c);
-			        mana -= c.Cost;
-			    }
-			}
+				summonAction = string.Join($";", summon.Select(x => $"SUMMON {x.InstanceId}"));
 
-			if (cardsToPlay.Count > 0)
-			{
-			    summonAction = string.Join(";", cardsToPlay.Select(x => $"SUMMON {x.InstanceId}"));
+				board = board.Concat(summon.Where(x => x.Abilities.HasFlag(Bonus.Charge)))
+					.OrderBy(x => x.Attack).ThenBy(x => x.Defense).ToArray();
 			}
-			*/
 		}
 
 		string attackAction = null;
@@ -249,7 +282,6 @@ class Program
 			List<Tuple<int, int>> result = new List<Tuple<int, int>>();
 
 			List<Card> opponentGuards = opponentBoard.Where(x => x.Abilities.HasFlag(Bonus.Guard)).ToList();
-			Console.Error.WriteLine($"Opponent guards: {string.Join(", ", opponentGuards.Select(x => x.InstanceId.ToString()))}");
 			foreach (Card myCard in board)
 			{
 				if (opponentGuards.Count > 0)
@@ -260,62 +292,24 @@ class Program
 						Card guard = opponentGuards.OrderBy(x => x.Defense).First();
 						guard.Defense -= myCard.Attack;
 						result.Add(Tuple.Create(myCard.InstanceId, guard.InstanceId));
+						continue;
 					}
-					else
-					{
-						Card guardDeath = killableGuards.OrderByDescending(x => x.Defense).First();
-						result.Add(Tuple.Create(myCard.InstanceId,guardDeath.InstanceId));
-						opponentGuards.Remove(guardDeath);
-						opponentBoard.Remove(guardDeath);
-					}
+
+					result.Add(Kill(myCard, killableGuards, opponentBoard, opponentGuards, true));
 					continue;
 				}
-				
-				Card[] killable = opponentBoard.Where(x => x.Defense <= myCard.Attack).OrderBy(x => x.Attack).ToArray();
 
+				Card[] killable = opponentBoard.Where(x => x.Defense <= myCard.Attack).OrderBy(x => x.Attack).ToArray();
 				if (killable.Length == 0)
 				{
 					result.Add(Tuple.Create(myCard.InstanceId, -1));
 					continue;
 				}
-				
 
-				Card current = killable[0];
-				if (current.Attack > myCard.Defense)
-				{
-					Card lastCard = killable.Last();
-					result.Add(Tuple.Create(myCard.InstanceId, lastCard.InstanceId));
-					opponentBoard.Remove(lastCard);
-					continue;
-				}
-
-				int index = -1;
-				int usedAttackPoint = 0;
-
-				for (var i = 0; i < killable.Length; i++)
-				{
-					current = killable[i];
-					if (current.Attack > myCard.Defense)
-					{
-						continue;
-					}
-
-					if (usedAttackPoint < current.Defense)
-					{
-						usedAttackPoint = current.Defense;
-						index = i;
-					}
-				}
-
-				if (index < 0)
-				{
-					index = 0;
-				}
-
-				result.Add(Tuple.Create(myCard.InstanceId, killable[index].InstanceId));
-				opponentBoard.Remove(killable[index]);
+				result.Add(Kill(myCard, killable, opponentBoard, null, false));
+				continue;
 			}
-			
+
 			if (result.Count > 0)
 			{
 				attackAction = string.Join(";", result.Select(x => $"ATTACK {x.Item1} {x.Item2}"));
@@ -347,7 +341,7 @@ class Program
 	}
 
 	private static int[] _draftCardsPerManaCount = new int[13];
-	private static double _minValueToTake = 2.95;
+	private static double _minValueToTake = 3.2;
 
 	private static int[] _draftMaximalCards =
 	{
@@ -416,12 +410,12 @@ class Program
 	}
 
 	private static double Numerateur(Card card)
-	{	
-		var tuple = GetBonus(card.Abilities);
+	{
+		Tuple<double, double> tuple = GetBonus(card.Abilities);
 		var x = tuple.Item1;
 		var y = tuple.Item2;
-		return (card.Attack * x
-			  + card.Defense * y);
+		return card.Attack * x
+		       + card.Defense * y;
 	}
 
 	static Tuple<double, double> GetBonus(Bonus bonus)
@@ -433,10 +427,12 @@ class Program
 		{
 			x += k;
 		}
+
 		if (bonus.HasFlag(Bonus.Guard))
 		{
 			y += k;
 		}
+
 		if (bonus.HasFlag(Bonus.Breakthrough))
 		{
 			x += k;
