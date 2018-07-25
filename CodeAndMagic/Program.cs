@@ -61,7 +61,7 @@ class Program
 			CardNumber = int.Parse(inputs[0]);
 			InstanceId = int.Parse(inputs[1]);
 			Location = location == 0 ? CardLocation.MyHand : location == 1 ? CardLocation.MyBoard : CardLocation.OpponentBoard;
-			CardType = (CardType)int.Parse(inputs[3]);
+			CardType = (CardType) int.Parse(inputs[3]);
 			Cost = int.Parse(inputs[4]);
 			Attack = int.Parse(inputs[5]);
 			Defense = int.Parse(inputs[6]);
@@ -82,9 +82,9 @@ class Program
 	enum CardType
 	{
 		Creature = 0,
-		GreenItem,
-		RedItem,
-		BlueItem
+		GreenItem = 1,
+		RedItem = 2,
+		BlueItem = 3
 	}
 
 	enum CardLocation
@@ -207,7 +207,7 @@ class Program
 	private static int Ecart(List<Card> cards)
 	{
 		double average = cards.Average(x => x.Cost);
-		return (int)Math.Floor(cards.Sum(x => x.Cost - average));
+		return (int) Math.Floor(cards.Sum(x => x.Cost - average));
 	}
 
 	private static Tuple<int, int> Kill(Card myCard, Card[] killable, List<Card> opponentBoard, List<Card> opponentGuard, bool allowDying)
@@ -382,10 +382,9 @@ class Program
 
 			double value = Numerateur(card) / divider;
 
-			//ligue bois only
-			if (card.Attack == 0)
+			if (card.CardType != CardType.Creature)
 			{
-				value = -10;
+				value = -90;
 			}
 
 			cardValues[i] = value;
@@ -406,11 +405,7 @@ class Program
 		{
 			for (var i = 0; i < cards.Count; i++)
 			{
-				if (cards[i].CardType != CardType.Creature)
-				{
-					continue;
-				}
-				else if (bestValue < cardValues[i])
+				if (bestValue < cardValues[i])
 				{
 					bestValue = cardValues[i];
 					bestCardIndex = i;
@@ -452,6 +447,7 @@ class Program
 
 		return Tuple.Create(x, y);
 	}
+
 	static bool IsItem(Card card)
 	{
 		switch (card.CardType)
