@@ -39,13 +39,13 @@ class Program
 		Lethal = 16,
 		Ward = 32
 	}
-	
+
 	class Card
 	{
 		public int CardNumber;
 		public int InstanceId;
 		public CardLocation Location;
-		public int CardType;
+		public CardType CardType;
 		public int Cost;
 		public int Attack;
 		public int Defense;
@@ -61,22 +61,30 @@ class Program
 			CardNumber = int.Parse(inputs[0]);
 			InstanceId = int.Parse(inputs[1]);
 			Location = location == 0 ? CardLocation.MyHand : location == 1 ? CardLocation.MyBoard : CardLocation.OpponentBoard;
-			CardType = int.Parse(inputs[3]);
+			CardType = (CardType)int.Parse(inputs[3]);
 			Cost = int.Parse(inputs[4]);
 			Attack = int.Parse(inputs[5]);
 			Defense = int.Parse(inputs[6]);
 			Abilities = Bonus.None;
 			if (inputs[7][0] == 'B') Abilities |= Bonus.Breakthrough;
-			if (inputs[7][0] == 'C') Abilities |= Bonus.Charge;
-			if (inputs[7][0] == 'D') Abilities |= Bonus.Drain;
-			if (inputs[7][0] == 'G') Abilities |= Bonus.Guard;
-			if (inputs[7][0] == 'L') Abilities |= Bonus.Lethal;
-			if (inputs[7][0] == 'W') Abilities |= Bonus.Ward;
-			
+			if (inputs[7][1] == 'C') Abilities |= Bonus.Charge;
+			if (inputs[7][2] == 'D') Abilities |= Bonus.Drain;
+			if (inputs[7][3] == 'G') Abilities |= Bonus.Guard;
+			if (inputs[7][4] == 'L') Abilities |= Bonus.Lethal;
+			if (inputs[7][5] == 'W') Abilities |= Bonus.Ward;
+
 			MyHealthChange = int.Parse(inputs[8]);
 			OpponentHealthChange = int.Parse(inputs[9]);
 			CardDraw = int.Parse(inputs[10]);
 		}
+	}
+
+	enum CardType
+	{
+		Creature = 0,
+		GreenItem,
+		RedItem,
+		BlueItem
 	}
 
 	enum CardLocation
@@ -180,7 +188,7 @@ class Program
 		int firstMana = playableCombinations[0].Item1;
 		int firstCount = playableCombinations[0].Item2.Count;
 
-		List<Tuple<List<Card>,int>> filteredItems = playableCombinations.TakeWhile(x => x.Item1 == firstMana && x.Item2.Count == firstCount)
+		List<Tuple<List<Card>, int>> filteredItems = playableCombinations.TakeWhile(x => x.Item1 == firstMana && x.Item2.Count == firstCount)
 			.Select(x => Tuple.Create(x.Item2, Ecart(x.Item2)))
 			.OrderBy(x => x.Item2)
 			.ToList();
@@ -199,7 +207,7 @@ class Program
 	private static int Ecart(List<Card> cards)
 	{
 		double average = cards.Average(x => x.Cost);
-		return (int) Math.Floor(cards.Sum(x => x.Cost - average));
+		return (int)Math.Floor(cards.Sum(x => x.Cost - average));
 	}
 
 	private static string Play(Player me, Player opponent, int opponentHand, List<Card> cards)
@@ -291,7 +299,7 @@ class Program
 				result.Add(Tuple.Create(myCard.InstanceId, killable[index].InstanceId));
 				opponentBoard.Remove(killable[index]);
 			}
-			
+
 			if (result.Count > 0)
 			{
 				attackAction = string.Join(";", result.Select(x => $"ATTACK {x.Item1} {x.Item2}"));
@@ -380,7 +388,11 @@ class Program
 		{
 			for (var i = 0; i < cards.Count; i++)
 			{
-				if (bestValue < cardValues[i])
+				if (cards[i].CardType != CardType.Creature)
+				{
+					continue;
+				}
+				else if (bestValue < cardValues[i])
 				{
 					bestValue = cardValues[i];
 					bestCardIndex = i;
@@ -392,7 +404,7 @@ class Program
 	}
 
 	private static double Numerateur(Card card)
-	{	
+	{
 		var tuple = GetBonus(card.Abilities);
 		var x = tuple.Item1;
 		var y = tuple.Item2;
@@ -419,5 +431,15 @@ class Program
 		}
 
 		return Tuple.Create(x, y);
+	}
+	static bool IsItem(Card card)
+	{
+		switch (card.CardType)
+		{
+			case CardType.Creature:
+				return false;
+			default:
+				return true;
+		}
 	}
 }
