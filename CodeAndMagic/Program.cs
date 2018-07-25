@@ -102,11 +102,48 @@ class Program
             //Console.WriteLine("PASS");
         }
     }
+    
+    private static IEnumerable<List<Card>> DoCombination(Card[] hand, int mana)
+    {
+        hand = hand.OrderByDescending(x => x.Cost).ToArray();
+        IEnumerable<List<Card>> ChooseRec(List<Card> entry, int offset, int remainingMana)
+        {
+            if (offset >= entry.Count)
+            {
+                yield return entry;
+            }
+            else
+            {
+                Card[] local = entry.ToArray();
+                
+                for (var i = offset; i < hand.Length; i++)
+                {
+                    Card other = hand[i];
+                    if (other.Cost > remainingMana)
+                    {
+                        continue;
+                    }
+                    
+                    List<Card> t = new List<Card>(local)
+                    {
+                        other
+                    };
+                    foreach (List<Card> cards in ChooseRec(t, i + 1, remainingMana - other.Cost))
+                    {
+                        yield return cards;
+                    }
+                }
+            }
+        }
+
+        return ChooseRec(new List<Card>(), 0, mana);
+    }
 
     private static string Play(Player me, Player opponent, int opponentHand, List<Card> cards)
     {
-        Card[] board = cards.Where(x => x.Location == CardLocation.MyBoard).ToArray();
+        Card[] board = cards.Where(x => x.Location == CardLocation.MyBoard).OrderBy(x => x.Attack).ThenBy(x => x.Defense).ToArray();
         Card[] hand = cards.Where(x => x.Location == CardLocation.MyHand && x.Cost <= me.Mana).OrderByDescending(x => x.Cost).ToArray();
+        List<Card> opponentBoard = cards.Where(x => x.Location == CardLocation.OpponentBoard).ToList();
         if (IsLethal(opponent.Health, board))
         {
             return string.Join(";", board.Select(x => $"ATTACK {x.InstanceId} -1 Lethal mode"));
@@ -140,7 +177,53 @@ class Program
         {
             //attack
             
-            attackAction = string.Join(";", board.Select(x => $"ATTACK {x.InstanceId} -1 yolo"));
+            // Trier nos cartes par attaque puis vie (done plus haut)
+
+            List<(int source, int target)> result = new List<(int source, int target)>();
+            foreach (Card myCard in board)
+            {
+                Card[] killable = opponentBoard.Where(x => x.Defense <= myCard.Attack).OrderBy(x => x.Attack).ToArray();
+
+                if (killable.Length == 0)
+                {
+                    result.Add((myCard.InstanceId, -1));
+                    continue;
+                }
+
+                Card current = killable[0];
+                if (current.Attack > myCard.Defense)
+                {
+                    result.Add((myCard.InstanceId, killable.Last().InstanceId));
+                    opponentBoard.Remove(killable.Last());
+                    continue;
+                }
+
+                int index = -1;
+                int usedAttackPoint = 0;
+                
+                for (var i = 0; i < killable.Length; i++)
+                {
+                    current = killable[i];
+                    if (current.Attack > myCard.Defense)
+                    {
+                        continue;
+                    }
+
+                    if (usedAttackPoint < current.Defense)
+                    {
+                        usedAttackPoint = current.Defense;
+                        index = i;
+                    }
+                }
+
+                if (index < 0)
+                {
+                    index = 0;
+                }
+                
+                result.Add((myCard.InstanceId, killable[index].InstanceId));
+                opponentBoard.Remove(killable[index]);
+            }
         }
 
         if (summonAction != null || attackAction != null)
