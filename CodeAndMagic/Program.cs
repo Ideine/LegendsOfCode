@@ -351,7 +351,7 @@ class Program
 				divider = 0.8;
 			}
 
-			double value = (card.Attack + card.Defense * 1.25) / divider;
+			double value = Numerateur(card) / divider;
 
 			//ligue bois only
 			if (card.Attack == 0)
@@ -386,5 +386,35 @@ class Program
 		}
 
 		return $"PICK {bestCardIndex}";
+	}
+
+	private static double Numerateur(Card card)
+	{	
+		var tuple = GetBonus(card.Abilities);
+		var x = tuple.Item1;
+		var y = tuple.Item2;
+		return (card.Attack * x
+			  + card.Defense * y);
+	}
+
+	static Tuple<double, double> GetBonus(Bonus bonus)
+	{
+		double k = 0.25;
+		double x = 1;
+		double y = 1.25;
+		if (bonus.HasFlag(Bonus.Charge))
+		{
+			x += k;
+		}
+		if (bonus.HasFlag(Bonus.Guard))
+		{
+			y += k;
+		}
+		if (bonus.HasFlag(Bonus.Breakthrough))
+		{
+			x += k;
+		}
+
+		return Tuple.Create(x, y);
 	}
 }
