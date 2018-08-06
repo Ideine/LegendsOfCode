@@ -1,6 +1,9 @@
 ﻿using System;
 using System.Linq;
 using System.Collections.Generic;
+using System.Data.Common;
+using System.Dynamic;
+using System.Reflection.Metadata.Ecma335;
 
 /**
  * Auto-generated code below aims at helping you parse
@@ -65,14 +68,103 @@ class Program
 		public int MyHealthChange;
 		public int OpponentHealthChange;
 		public int CardDraw;
+		public bool Playable { get; set; }
+		public bool Dead { get; set; }
 
-		public bool IsItem => CardType != CardType.Creature;
-		public bool Guard => Abilities.HasFlag(Bonus.Guard);
-		public bool Charge => Abilities.HasFlag(Bonus.Charge);
-		public bool Breakthrough => Abilities.HasFlag(Bonus.Breakthrough);
-		public bool Lethal => Abilities.HasFlag(Bonus.Lethal);
-		public bool Drain => Abilities.HasFlag(Bonus.Drain);
-		public bool Ward => Abilities.HasFlag(Bonus.Ward);
+		public bool IsItem=>CardType != CardType.Creature;
+
+		public bool Guard
+		{
+			get => Abilities.HasFlag(Bonus.Guard);
+			set
+			{
+				if (value)
+				{
+					Abilities |= Bonus.Guard;
+				}
+				else 
+				{ 
+					Abilities ^= Bonus.Guard;
+				}
+			}
+		}
+
+		public bool Charge
+		{
+			get => Abilities.HasFlag(Bonus.Charge);
+			set
+			{
+				if (value)
+				{
+					Abilities |= Bonus.Charge;
+				}
+				else
+				{
+					Abilities ^= Bonus.Charge;
+				}
+			}
+		}
+
+		public bool Breakthrough
+		{
+			get => Abilities.HasFlag(Bonus.Breakthrough);
+			set
+			{
+				if (value)
+				{
+					Abilities |= Bonus.Breakthrough;
+				}
+				else
+				{
+					Abilities ^= Bonus.Breakthrough;
+				}
+			}
+		}
+
+		public bool Lethal
+		{
+			get => Abilities.HasFlag(Bonus.Lethal);
+			set
+			{
+				if (value)
+				{
+					Abilities |= Bonus.Lethal;
+				}
+				else
+				{
+					Abilities ^= Bonus.Lethal;
+				}
+			}
+		}
+
+		public bool Drain
+		{
+			get => Abilities.HasFlag(Bonus.Drain);
+			set
+			{
+				if (value)
+				{
+					Abilities |= Bonus.Drain;
+				}
+				else
+				{
+					Abilities ^= Bonus.Drain;
+				}
+			}
+		}
+
+		public bool Ward
+		{
+			get => Abilities.HasFlag(Bonus.Ward);
+			set {
+				if (value)
+				{
+					Abilities |= Bonus.Ward;
+				} else {
+				Abilities ^= Bonus.Ward;
+				}
+			}
+		}
 
 		public void Read()
 		{
@@ -99,6 +191,8 @@ class Program
 			MyHealthChange = int.Parse(inputs[8]);
 			OpponentHealthChange = int.Parse(inputs[9]);
 			CardDraw = int.Parse(inputs[10]);
+			Playable = true;
+			Dead = false;
 		}
 
 		public double CalculerValeur()
@@ -175,6 +269,21 @@ class Program
 		0, 1,
 	};
 
+	static class UtilExtension
+	{
+		public static T FindMax<T>(IEnumerable<T> list, Func<T, T, T> maxFunc)
+		{
+			T[] internalList = list.ToArray();
+			T max = internalList[0];
+			foreach (T item in internalList)
+			{
+				max = maxFunc(max, item);
+			}
+
+			return max;
+		}
+	}
+
 	static class ActionHelper
 	{
 		public static string PickCard(int card) => $"PICK {card}";
@@ -184,7 +293,7 @@ class Program
 		public static string Summon(Card card) => $"SUMMON {card.InstanceId}";
 
 		public static string Attack(Card attacker, Card defender = null) =>
-			$"ATTACK {attacker.InstanceId} {defender?.InstanceId ?? -1};";
+			$"ATTACK {attacker.InstanceId} {defender?.InstanceId ?? -1}";
 
 		public static string UseItem(Card itemUsed, Card target = null) =>
 			$"USE {itemUsed.InstanceId} {target?.InstanceId ?? -1}";
@@ -231,7 +340,7 @@ class Program
 		int bestCardIndex = -1;
 		double bestValue = -100;
 
-		for (var i = 0; i < cards.Count; i++)
+		for (int i = 0; i < cards.Count; i++)
 		{
 			Card card = cards[i];
 
@@ -256,7 +365,7 @@ class Program
 
 		if (bestCardIndex < 0)
 		{
-			for (var i = 0; i < cards.Count; i++)
+			for (int i = 0; i < cards.Count; i++)
 			{
 				if (bestValue < cardValues[i])
 				{
@@ -271,23 +380,102 @@ class Program
 
 	private static string Play(Player me, Player opponent, int opponentHand, List<Card> cards)
 	{
-		var myBoard = cards.Where(x => x.Location == CardLocation.MyBoard).ToList();
+		List<Card> myBoard = cards.Where(x => x.Location == CardLocation.MyBoard).ToList();
 
-		var myHand = cards.Where(x => x.Location == CardLocation.MyHand && x.Cost <= me.Mana).ToList();
+		List<Card> myHand = cards.Where(x => x.Location == CardLocation.MyHand && x.Cost <= me.Mana).ToList();
 
-		var opponentBoard = cards.Where(x => x.Location == CardLocation.OpponentBoard).ToList();
+		List<Card> opponentBoard = cards.Where(x => x.Location == CardLocation.OpponentBoard).ToList();
 
-		var lethal = IsLethal(opponent.Health, me.Mana, myBoard, opponentBoard, myHand);
+		Tuple<bool, string> lethal = CanFinish(opponent.Health, me.Mana, myBoard, opponentBoard, myHand);
 
 		if (lethal.Item1)
 		{
 			return lethal.Item2;
 		}
+		else
+		{
+			List<string> action = new List<string>();
+			//var combi = DoCombination(myHand.ToArray(), me.Mana);
+			int opponentAttack = opponentBoard.Sum(x => x.Attack);
+			int myAttack = myBoard.Sum(x => x.Attack);
+			List<Card> myItem = myHand.Where(x => x.IsItem).ToList();
+			List<Card> opponentGuard = opponentBoard.Where(x => x.Guard).ToList();
 
-		return ActionHelper.SkipTurn();
+			if (opponentGuard.Count > 0)
+			{
+				foreach (var guard in opponentGuard)
+				{
+					var guardRemoval = myItem.FirstOrDefault(x => x.CardType == CardType.RedItem && x.Guard&&x.Playable && x.Cost<=me.Mana);
+					if (guardRemoval != null)
+					{
+						//si j'ai un item pour retirer le guard
+						 action.Add(ActionHelper.UseItem(guardRemoval, guard));
+						me.Mana -= guardRemoval.Cost;
+						guardRemoval.Playable = false;
+						guard.Guard = false;
+						continue;
+					}
 
+					//TODO CHECK WARD
+					var damageItem = myItem.FirstOrDefault(x => x.IsItem && (guard.Defense-x.Defense) <= 0 && x.Cost<=me.Mana);
+					if (damageItem != null)
+					{
+						//si j'ai un item pour le tuer
+						action.Add(ActionHelper.UseItem(damageItem, guard));
+						me.Mana -= damageItem.Cost;
+						damageItem.Playable = false;
+						guard.Dead = true;
+						continue;
+					}
+					
+					//TODO CHECK WARD
+					var lethalList = myBoard.Where(x => x.Lethal && x.Playable).OrderBy(x => x.Attack).ToList();
+					if (lethalList.Any())
+					{
+						//si j'ai un 
+						var lethalCard = lethalList.First();
+						action.Add(ActionHelper.Attack(lethalCard,guard));
+						lethalCard.Playable = false;
+						guard.Dead = true;
+						continue;
+					}
 
-		///TODO REWORK
+					//TODO check ward
+					var lethalItem = myHand.FirstOrDefault(x => x.Playable && x.CardType == CardType.GreenItem && x.Cost <= me.Mana);
+					if (lethalItem != null)
+					{
+						var nonLethal = myBoard.Where(x => x.Playable&&!x.Lethal).ToList().OrderByDescending(x => x.Defense).ToList();
+						if (nonLethal.Any())
+						{
+							var newLethal = nonLethal.First();
+							action.Add(ActionHelper.UseItem(lethalItem,newLethal));
+							action.Add(ActionHelper.Attack(newLethal,guard));
+							guard.Dead = true;
+							lethalItem.Playable = false;
+							newLethal.Playable = false;
+							me.Mana -= lethalItem.Cost;
+						}
+					}
+				}
+			}
+
+			//TODO UNE FOIS TOUS LES GUARDS MORTS
+			
+			return string.Join(" ; ", action);
+
+			/*
+			 * à gérer :
+			 * 	lethal
+			 * 	guard
+			 * 	breakthrough
+			 * 	charge
+			 *	item
+			 * 	ward
+			 * 	defense
+			 */
+		}
+
+		//TODO REWORK
 		//		if (opponentBoard.All(x => !x.Abilities.HasFlag(Bonus.Guard)) && IsLethal(opponent.Health, myBoard))
 		//		{
 		//			return string.Join(";", myBoard.Select(x => $"ATTACK {x.InstanceId} -1 Lethal mode"));
@@ -372,12 +560,12 @@ class Program
 		//		return "PASS";
 	}
 
-	private static Tuple<bool, string> IsLethal(int opponentHealthPoint, int mana, List<Card> myBoard, List<Card> ennemyBoard, List<Card> myHand)
+	private static Tuple<bool, string> CanFinish(int opponentHealthPoint, int mana, List<Card> myBoard, List<Card> ennemyBoard, List<Card> myHand)
 	{
-		var ennmyGuard = ennemyBoard.Where(x => x.Guard).ToList();
-		if (ennmyGuard.Count > 0)
+		if (ennemyBoard.Any(x => x.Guard))
 		{
-			//kill + breakthrough + item
+			//TODO peut être amélioré
+			return Tuple.Create(false, string.Empty);
 		}
 		else
 		{
@@ -392,10 +580,10 @@ class Program
 			{
 				int health = opponentHealthPoint - myAttack;
 
-				var chargeableCreatures = myHand.Where(x => !x.IsItem && x.Charge).ToList();
-				var dealOnSummonCard = myHand.Where(x => x.OpponentHealthChange > 0).ToList();
-				var dealItem = myHand.Where(x => x.CardType == CardType.BlueItem && x.Attack > 0).ToList();
-				var boostItem = myHand.Where(x => x.CardType == CardType.GreenItem && x.Attack > 0).ToList();
+				List<Card> chargeableCreatures = myHand.Where(x => !x.IsItem && x.Charge).ToList();
+				List<Card> dealOnSummonCard = myHand.Where(x => x.OpponentHealthChange > 0).ToList();
+				List<Card> dealItem = myHand.Where(x => x.CardType == CardType.BlueItem && x.Attack > 0).ToList();
+				List<Card> boostItem = myHand.Where(x => x.CardType == CardType.GreenItem && x.Attack > 0).ToList();
 
 				if (chargeableCreatures.Count > 0 || dealOnSummonCard.Count > 0 || dealItem.Count > 0 || boostItem.Count > 0)
 				{
@@ -403,9 +591,9 @@ class Program
 					if (myBoard.Count < MaxBoard)
 					{
 						//si mon board n'est pas rempli
-						var playableCards = chargeableCreatures.Concat(dealOnSummonCard).Concat(dealItem).Concat(boostItem).ToHashSet();
-						var allCombo = DoCombination(playableCards.ToArray(), mana);
-						foreach (var combo in allCombo)
+						HashSet<Card> playableCards = chargeableCreatures.Concat(dealOnSummonCard).Concat(dealItem).Concat(boostItem).ToHashSet();
+						IEnumerable<List<Card>> allCombo = DoCombination(playableCards.ToArray(), mana);
+						foreach (List<Card> combo in allCombo)
 						{
 							if (combo.Count(x => x.CardType == CardType.Creature) < (MaxBoard - myBoard.Count))
 							{
@@ -430,9 +618,9 @@ class Program
 									greenItem = string.Join(";", combo.Where(x => x.CardType == CardType.GreenItem).Select(x => ActionHelper.UseItem(x, monster)));
 								}
 
-								var summon = string.Join(";", combo.Where(x => x.CardType == CardType.Creature).Select(ActionHelper.Summon));
-								var monsterAttack = string.Join(";", myBoard.Select(x => ActionHelper.Attack(x)));
-								var blueAttack = string.Join(";", combo.Where(x => x.CardType == CardType.BlueItem).Select(x => ActionHelper.UseItem(x)));
+								string summon = string.Join(";", combo.Where(x => x.CardType == CardType.Creature).Select(ActionHelper.Summon));
+								string monsterAttack = string.Join(";", myBoard.Select(x => ActionHelper.Attack(x)));
+								string blueAttack = string.Join(";", combo.Where(x => x.CardType == CardType.BlueItem).Select(x => ActionHelper.UseItem(x)));
 
 								return Tuple.Create(true, string.Join(";", summon, blueAttack, greenItem, monsterAttack));
 							}
@@ -442,16 +630,16 @@ class Program
 					}
 					else
 					{
-						var playableCards = dealOnSummonCard.Concat(dealItem).Concat(boostItem).ToHashSet();
-						var allCombo = DoCombination(playableCards.ToArray(), mana);
-						foreach (var combo in allCombo)
+						HashSet<Card> playableCards = dealOnSummonCard.Concat(dealItem).Concat(boostItem).ToHashSet();
+						IEnumerable<List<Card>> allCombo = DoCombination(playableCards.ToArray(), mana);
+						foreach (List<Card> combo in allCombo)
 						{
 							if (combo.Sum(x => x.Attack + x.OpponentHealthChange) >= health)
 							{
-								var monsterAttack = string.Join(";", myBoard.Select(x => ActionHelper.Attack(x)));
-								var blueAttack = string.Join(";", combo.Where(x => x.CardType == CardType.BlueItem).Select(x => ActionHelper.UseItem(x)));
-								var firstMonster = myBoard[0];
-								var greenItem = string.Join(";", combo.Where(x => x.CardType == CardType.GreenItem).Select(x => ActionHelper.UseItem(x, firstMonster)));
+								string monsterAttack = string.Join(";", myBoard.Select(x => ActionHelper.Attack(x)));
+								string blueAttack = string.Join(";", combo.Where(x => x.CardType == CardType.BlueItem).Select(x => ActionHelper.UseItem(x)));
+								Card firstMonster = myBoard[0];
+								string greenItem = string.Join(";", combo.Where(x => x.CardType == CardType.GreenItem).Select(x => ActionHelper.UseItem(x, firstMonster)));
 
 								return Tuple.Create(true, string.Join(";", blueAttack, greenItem, monsterAttack));
 							}
@@ -483,7 +671,7 @@ class Program
 		{
 			Card[] local = entry.ToArray();
 			bool found = false;
-			for (var i = offset; i < hand.Length; i++)
+			for (int i = offset; i < hand.Length; i++)
 			{
 				Card other = hand[i];
 				if (other.Cost > remainingMana)
@@ -563,7 +751,7 @@ class Program
 		int index = -1;
 		int usedAttackPoint = 0;
 
-		for (var i = 0; i < killable.Length; i++)
+		for (int i = 0; i < killable.Length; i++)
 		{
 			current = killable[i];
 			if (current.Attack > myCard.Defense)
